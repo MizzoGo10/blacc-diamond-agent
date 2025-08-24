@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  blacc-diamond-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: blacc-diamond-deep-ocean
+    restart: unless-stopped
+    environment:
+      - DEPLOYMENT_ENV=deep_ocean
+      - MIN_WORKERS=8
+      - MAX_WORKERS=64
+      - RUST_LOG=info
+      - QUICKNODE_RPC_URL=${QUICKNODE_RPC_URL}
+      - QUICKNODE_WS_URL=${QUICKNODE_WS_URL}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+    ports:
+      - "8080:8080"  # Main API
+      - "8081:8081"  # Metrics
+      - "8082:8082"  # Admin
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config:ro
+    networks:
+      - blacc-diamond-network
+    deploy:
+      resources:
+        limits:
+          cpus: '16.0'
+          memory: 32G
+        reservations:
+          cpus: '8.0'
+          memory: 16G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: blacc-diamond-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - blacc-diamond-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: blacc-diamond-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=deep_ocean_admin_2024
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - blacc-diamond-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: blacc-diamond-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    networks:
+      - blacc-diamond-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: blacc-diamond-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - blacc-diamond-engine
+      - grafana
+    networks:
+      - blacc-diamond-network
+
+networks:
+  blacc-diamond-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  redis_data:
+

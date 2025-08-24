@@ -1,0 +1,43 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  - job_name: 'blacc-diamond-engine'
+    static_configs:
+      - targets: ['blacc-diamond-engine:8081']
+    scrape_interval: 5s
+    metrics_path: /metrics
+    
+  - job_name: 'consciousness-metrics'
+    static_configs:
+      - targets: ['blacc-diamond-engine:8081']
+    scrape_interval: 1s
+    metrics_path: /consciousness/metrics
+    
+  - job_name: 'neural-metrics'
+    static_configs:
+      - targets: ['blacc-diamond-engine:8081']
+    scrape_interval: 2s
+    metrics_path: /neural/metrics
+    
+  - job_name: 'quantum-metrics'
+    static_configs:
+      - targets: ['blacc-diamond-engine:8081']
+    scrape_interval: 1s
+    metrics_path: /quantum/metrics
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
